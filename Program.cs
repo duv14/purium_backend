@@ -1,65 +1,84 @@
-using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using System.Text.Json;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
-// ----- move all record declarations here -----
-record RegisterRequest(string Username);
-record SendRequest(string From, string To, string Subject, string Body);
-record Email(string From, string To, string Subject, string Body, DateTime SentAt);
-
-// ----- then top-level statements -----
-var builder = WebApplication.CreateBuilder(args);
-var app = builder.Build();
-
-var usersFile = "users.json";
-var mailsFile = "emails.json";
-
-List<string> users = File.Exists(usersFile)
-    ? JsonSerializer.Deserialize<List<string>>(File.ReadAllText(usersFile)) ?? []
-    : [];
-
-List<Email> emails = File.Exists(mailsFile)
-    ? JsonSerializer.Deserialize<List<Email>(File.ReadAllText(mailsFile)) ?? []
-    : [];
-
-// register user
-app.MapPost("/api/register", ([FromBody] RegisterRequest req) =>
+namespace PuriumBackend
 {
-    var user = req.Username.Trim().ToLower();
-    if (users.Contains(user)) return Results.BadRequest("User exists");
-    users.Add(user);
-    File.WriteAllText(usersFile, JsonSerializer.Serialize(users));
-    return Results.Ok(new { address = $"{user}@purium.xyz" });
-});
+    // Record types
+    public record RegisterRequest(string Username);
+    public record SendRequest(string From, string To, string Subject, string Body);
+    public record Email(string From, string To, string Subject, string Body, DateTime SentAt);
 
-// send "email"
-app.MapPost("/api/send", ([FromBody] SendRequest req) =>
-{
-    var from = req.From.ToLower();
-    var to = req.To.ToLower();
+    public class Program
+    {
+        public static void Main(string[] args)
+        {
+            var builder = WebApplication.CreateBuilder(args);
+            var app = builder.Build();
 
-    if (!users.Contains(from) || !users.Contains(to))
-        return Results.BadRequest("Invalid sender or recipient");
+            var usersFile = "users.json";
+            var mailsFile = "emails.json";
 
-    var msg = new Email(from, to, req.Subject, req.Body, DateTime.UtcNow);
-    emails.Add(msg);
-    File.WriteAllText(mailsFile, JsonSerializer.Serialize(emails));
-    return Results.Ok("sent");
-});
+            List<string> users = File.Exists(usersFile)
+                ? JsonSerializer.Deserialize<List<string>>(File.ReadAllText(usersFile)) ?? []
+                : [];
 
-// get inbox
-app.MapGet("/api/inbox/{user}", (string user) =>
-{
-    user = user.ToLower();
-    var inbox = emails.Where(e => e.To == user).OrderByDescending(e => e.SentAt);
-    return Results.Ok(inbox);
-});
+            List<Email> emails = File.Exists(mailsFile)
+                ? JsonSerializer.Deserialize<List<Email>>(File.ReadAllText(mailsFile)) ?? []
+                : [];
 
-// get sent mail
-app.MapGet("/api/sent/{user}", (string user) =>
-{
-    user = user.ToLower();
-    var sent = emails.Where(e => e.From == user).OrderByDescending(e => e.SentAt);
-    return Results.Ok(sent);
-});
+            // Register endpoint
+            app.MapPost("/api/register", async (HttpContext ctx) =>
+            {
+                var req = await ctx.Request.ReadFromJsonAsync<RegisterRequest>();
+                if (req == null) return Results.BadRequest("Invalid request");
 
-app.Run();
+                var user = req.Username.Trim().ToLower();
+                if (users.Contains(user)) return Results.BadRequest("User exists");
+
+                users.Add(user);
+                File.WriteAllText(usersFile, JsonSerializer.Serialize(users));
+                return Results.Ok(new { address = $"{user}@purium.xyz" });
+            });
+
+            // Send email endpoint
+            app.MapPost("/api/send", async (HttpContext ctx) =>
+            {
+                var req = await ctx.Request.ReadFromJsonAsync<SendRequest>();
+                if (req == null) return Results.BadRequest("Invalid request");
+
+                var from = req.From.ToLower();
+                var to = req.To.ToLower();
+
+                if (!users.Contains(from) || !users.Contains(to))
+                    return Results.BadRequest("Invalid sender or recipient");
+
+                var msg = new Email(from, to, req.Subject, req.Body, DateTime.UtcNow);
+                emails.Add(msg);
+                File.WriteAllText(mailsFile, JsonSerializer.Serialize(emails));
+                return Results.Ok("sent");
+            });
+
+            // Inbox endpoint
+            app.MapGet("/api/inbox/{user}", (string user) =>
+            {
+                user = user.ToLower();
+                var inbox = emails.Where(e => e.To == user).OrderByDescending(e => e.SentAt);
+                return Results.Ok(inbox);
+            });
+
+            // Sent emails endpoint
+            app.MapGet("/api/sent/{user}", (string user) =>
+            {
+                user = user.ToLower();
+                var sent = emails.Where(e => e.From == user).OrderByDescending(e => e.SentAt);
+                return Results.Ok(sent);
+            });
+
+            app.Run();
+        }
+    }
+}
