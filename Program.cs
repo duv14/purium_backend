@@ -1,6 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 
+// ----- move all record declarations here -----
+record RegisterRequest(string Username);
+record SendRequest(string From, string To, string Subject, string Body);
+record Email(string From, string To, string Subject, string Body, DateTime SentAt);
+
+// ----- then top-level statements -----
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
 
@@ -12,13 +18,10 @@ List<string> users = File.Exists(usersFile)
     : [];
 
 List<Email> emails = File.Exists(mailsFile)
-    ? JsonSerializer.Deserialize<List<Email>>(File.ReadAllText(mailsFile)) ?? []
+    ? JsonSerializer.Deserialize<List<Email>(File.ReadAllText(mailsFile)) ?? []
     : [];
 
-record RegisterRequest(string Username);
-record SendRequest(string From, string To, string Subject, string Body);
-record Email(string From, string To, string Subject, string Body, DateTime SentAt);
-
+// register user
 app.MapPost("/api/register", ([FromBody] RegisterRequest req) =>
 {
     var user = req.Username.Trim().ToLower();
@@ -28,6 +31,7 @@ app.MapPost("/api/register", ([FromBody] RegisterRequest req) =>
     return Results.Ok(new { address = $"{user}@purium.xyz" });
 });
 
+// send "email"
 app.MapPost("/api/send", ([FromBody] SendRequest req) =>
 {
     var from = req.From.ToLower();
@@ -42,6 +46,7 @@ app.MapPost("/api/send", ([FromBody] SendRequest req) =>
     return Results.Ok("sent");
 });
 
+// get inbox
 app.MapGet("/api/inbox/{user}", (string user) =>
 {
     user = user.ToLower();
@@ -49,6 +54,7 @@ app.MapGet("/api/inbox/{user}", (string user) =>
     return Results.Ok(inbox);
 });
 
+// get sent mail
 app.MapGet("/api/sent/{user}", (string user) =>
 {
     user = user.ToLower();
