@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json;
 using System;
 using System.Collections.Generic;
@@ -17,7 +18,21 @@ namespace PuriumBackend
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
+
+            // Enable CORS for your Netlify frontend
+            var allowedOrigins = new string[] { "https://purium.xyz" };
+            builder.Services.AddCors(options =>
+            {
+                options.AddDefaultPolicy(policy =>
+                {
+                    policy.WithOrigins(allowedOrigins)
+                          .AllowAnyHeader()
+                          .AllowAnyMethod();
+                });
+            });
+
             var app = builder.Build();
+            app.UseCors();
 
             var usersFile = "users.json";
             var mailsFile = "emails.json";
@@ -29,6 +44,9 @@ namespace PuriumBackend
             List<Email> emails = File.Exists(mailsFile)
                 ? JsonSerializer.Deserialize<List<Email>>(File.ReadAllText(mailsFile)) ?? []
                 : [];
+
+            // Optional homepage so / doesn’t 404
+            app.MapGet("/", () => Results.Content("Purium Backend API is running.", "text/plain"));
 
             // Register endpoint
             app.MapPost("/api/register", async (HttpContext ctx) =>
